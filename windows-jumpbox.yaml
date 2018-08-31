@@ -1,0 +1,43 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Windows Jump Box
+Parameters:
+#added namespace for imports
+  NameSpace: 
+    Type: String
+    Description: Namespace used for variables
+  BoxName: 
+    Type: String
+    Description: Boxname variable  
+  KeyPairName: 
+    Type: String
+    Description: KeyPairName variable 
+  PrivateIP: 
+    Type: String
+    Description: PrivateIP variable 
+  ec2size: 
+    Type: String
+    Description: ec2size variable
+  AMI: 
+    Type: String
+    Description: AMI variable
+       
+Resources:  
+  WindowsJumpBox:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref ec2size
+      ImageId: !Ref AMI
+      PrivateIpAddress: !Ref PrivateIP
+      KeyName: !Ref KeyPairName
+      SubnetId:
+        Fn::ImportValue:
+          !Sub "${NameSpace}-Public-Subnet-1"
+      Tags:
+        - Key: Name
+          Value: !Ref BoxName
+      SecurityGroupIds:
+        - Fn::ImportValue:
+            !Sub "${NameSpace}-JumpWinSG"
+      
+    
+

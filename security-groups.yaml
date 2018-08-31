@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Security groups
+Parameters:
+  NameSpace: 
+    Type: String
+    Description: Namespace used for variables
+Resources:
+
+  LinuxJumpBoxGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH Access to Linux Jump Box
+      VpcId: 
+        Fn::ImportValue:
+          !Sub "${NameSpace}-VPCID"
+      SecurityGroupIngress:
+#for testing purposes
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 0.0.0.0/0
+
+      - IpProtocol: icmp
+        FromPort: '-1'
+        ToPort: '-1'
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Public-CIDR-1"
+      - IpProtocol: icmp
+        FromPort: '-1'
+        ToPort: '-1'
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Public-CIDR-2"
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Private-CIDR-1"
+      - IpProtocol: icmp
+        FromPort: '-1'
+        ToPort: '-1'
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Private-CIDR-2"
+
+
+  WindowsJumpBoxGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable RDP Access to Windows Jump Box
+      VpcId: 
+        Fn::ImportValue:
+          !Sub "${NameSpace}-VPCID"
+      SecurityGroupIngress:
+#for testing purposes
+      - IpProtocol: tcp
+        FromPort: '3389'
+        ToPort: '3389'
+        CidrIp: 0.0.0.0/0
+
+      - IpProtocol: icmp
+        FromPort: '-1'
+        ToPort: '-1'
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Public-CIDR-1"
+      - IpProtocol: icmp
+        FromPort: '-1'
+        ToPort: '-1'
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Public-CIDR-2"
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Private-CIDR-1"
+      - IpProtocol: icmp
+        FromPort: '-1'
+        ToPort: '-1'
+        CidrIp:
+          Fn::ImportValue:
+            !Sub "${NameSpace}-Private-CIDR-2"
+            
+Outputs:
+  JumpLxSG:
+    Description: Security Group export for Linux Jump Box
+    Value:
+      Ref: LinuxJumpBoxGroup
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-JumpLxSG"
+  JumpWinSG:
+    Description: Security Group export for Windows Jump Box
+    Value:
+      Ref: WindowsJumpBoxGroup
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-JumpWinSG"

@@ -1,0 +1,355 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 2-3 AZ VPC, with public and private subnets, MultiAz Nat availabile
+
+Parameters:
+  vpc:
+    Type: String
+    Default: ''
+  pubsubnet1:
+    Type: String
+    Default: ''
+  pubsubnet2:
+    Type: String
+    Default: ''
+  privatesubnet1:
+    Type: String
+    Default: ''
+  privatesubnet2:
+    Type: String
+    Default: ''
+  NameSpace: 
+    Type: String
+    Description: Namespace used for variables
+  VpcAvailabilityZones:
+    Type: CommaDelimitedList
+    Description: Optional - Comma-delimited list of VPC availability zones in which
+      to create subnets.
+    Default: ''
+  VpcPeers:
+    Type: CommaDelimitedList
+    Description: Optional - Comma-delimited list of VPC ty zones in which to create
+      subnets.  Required if setting VpcId.
+    Default: ''
+  TripleAz:
+    Type: CommaDelimitedList
+    Description: Optional - Set String to enable 3 AZ's
+    Default: ''
+  MultiAzNat:
+    Type: CommaDelimitedList
+    Description: Optional - Set String to enable MultiAz NatGateways
+    Default: ''
+  Tenancy: 
+    Type: String
+    Description: if vpc are dedicated or not, set to dedicated to enable
+    Default: 'default'
+Conditions:
+
+  UseSpecifiedVpcAvailabilityZones:
+    Fn::Not:
+    - Fn::Equals:
+      - Fn::Join:
+        - ''
+        - Ref: VpcAvailabilityZones
+      - ''
+  Use3Az:
+    Fn::Not:
+    - Fn::Equals:
+      - Fn::Join:
+        - ''
+        - Ref: TripleAz
+      - ''
+  UseMultiAzNat:
+    Fn::Not:
+    - Fn::Equals:
+      - Fn::Join:
+        - ''
+        - Ref: MultiAzNat
+      - ''
+  TripleAzAndNat: !And
+    - Condition: Use3Az
+    - Condition: UseMultiAzNat
+                     
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub "${NameSpace}-vpc"
+      CidrBlock: !Ref vpc
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: !Ref Tenancy
+
+  PubSubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      CidrBlock: !Ref pubsubnet1
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: !Sub "${NameSpace}-public-subnet-1"
+      AvailabilityZone:
+        Fn::If:
+        - UseSpecifiedVpcAvailabilityZones
+        - Fn::Select:
+          - '0'
+          - Ref: VpcAvailabilityZones
+        - Fn::Select:
+          - '0'
+          - Fn::GetAZs:
+              Ref: AWS::Region
+
+  PubSubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      CidrBlock: !Ref pubsubnet2
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: !Sub "${NameSpace}-public-subnet-2"
+      AvailabilityZone:
+        Fn::If:
+        - UseSpecifiedVpcAvailabilityZones
+        - Fn::Select:
+          - '1'
+          - Ref: VpcAvailabilityZones
+        - Fn::Select:
+          - '1'
+          - Fn::GetAZs:
+              Ref: AWS::Region 
+  DevSubnetAz1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      CidrBlock: !Ref privatesubnet1
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: !Sub "${NameSpace}-dev-subnet-1"
+      AvailabilityZone:
+        Fn::If:
+        - UseSpecifiedVpcAvailabilityZones
+        - Fn::Select:
+          - '0'
+          - Ref: VpcAvailabilityZones
+        - Fn::Select:
+          - '0'
+          - Fn::GetAZs:
+              Ref: AWS::Region
+
+  DevSubnetAz2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      CidrBlock: !Ref privatesubnet2
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: !Sub "${NameSpace}-dev-subnet-2"
+      AvailabilityZone:
+        Fn::If:
+        - UseSpecifiedVpcAvailabilityZones
+        - Fn::Select:
+          - '1'
+          - Ref: VpcAvailabilityZones
+        - Fn::Select:
+          - '1'
+          - Fn::GetAZs:
+              Ref: AWS::Region
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Sub "${NameSpace}-InternetGateway"
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: Vpc
+      InternetGatewayId:
+        Ref: InternetGateway
+  
+  RouteViaIgw:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+
+  PrivateRT:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  
+  PublicRouteViaIgw:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: RouteViaIgw
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+
+#Added to support traffic across private network to DNS
+  PrivateRouteViaIgw:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRT
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+
+  PubSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSubnetAz1
+      RouteTableId: !Ref RouteViaIgw
+  PubSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PubSubnetAz2
+      RouteTableId: !Ref RouteViaIgw  
+  DevSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DevSubnetAz1
+      RouteTableId: !Ref PrivateRT
+  DevSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref DevSubnetAz2
+      RouteTableId: !Ref PrivateRT
+
+#peering for VPC to VPC or region      
+#  PeeringRoute2:
+#    Type: AWS::EC2::Route
+#    Properties:
+#      DestinationCidrBlock: 10.102.30.0/24
+#      RouteTableId: !Ref PrivateRT
+#      VpcPeeringConnectionId: pcx-7207791b
+#  PeeringRoute1:
+#    Type: AWS::EC2::Route
+#    Properties:
+#      DestinationCidrBlock: 10.102.31.0/24
+#      RouteTableId: !Ref PrivateRT
+#      VpcPeeringConnectionId: pcx-7207791b
+
+
+##########################################
+  VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties: 
+      VpcId: !Ref Vpc
+      RouteTableIds: 
+      - !Ref PrivateRT
+      - !Ref RouteViaIgw
+      ServiceName: com.amazonaws.us-west-1.s3
+      PolicyDocument: {"Version":"2008-10-17","Statement":[{"Sid":"","Effect":"Allow","Principal":"*","Action":"*","Resource":"*"}]}
+      VpcEndpointType: Gateway
+
+Outputs:
+  VpcId:
+    Description: The VPC ID of the VPC
+    Value:
+      Ref: Vpc
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-VPCID"
+        
+  PublicCIDR1:
+    Description: Public CIDR 1 block
+    Value:
+      Ref: pubsubnet1
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Public-CIDR-1"
+        
+  PublicCIDR2:
+    Description: Public CIDR 2 block
+    Value:
+      Ref: pubsubnet2
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Public-CIDR-2"
+
+  PrivateCIDR1:
+    Description: Private CIDR 1 block
+    Value:
+      Ref: privatesubnet1
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Private-CIDR-1" 
+
+  PrivateCIDR2:
+    Description: Private CIDR 1 block
+    Value:
+      Ref: privatesubnet2
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Private-CIDR-2"           
+        
+  VpcCidr:
+    Description: The VPC CIDR of the VPC
+    Value:
+        Ref: vpc
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-VPC-CIDR"
+  PublicSubnet1:
+    Description: The ID of Public Subnet 1
+    Value:
+      Ref: PubSubnetAz1
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Public-Subnet-1"
+  PublicSubnet2:
+    Description: The ID of Public Subnet 2
+    Value:
+      Ref: PubSubnetAz2
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Public-Subnet-2"
+  PrivateSubnetAz1:
+    Description: The ID of Private Subnet 1
+    Value:
+      Ref: DevSubnetAz1
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Private-Subnet-1"
+  PrivateSubnetAz2:
+    Description: The ID of Private Subnet 2
+    Value:
+      Ref: DevSubnetAz2
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-Private-Subnet-2"
+  AvailabilityZone1:
+    Description: AZ 1
+    Value:
+      Fn::GetAtt:
+      - PubSubnetAz1
+      - AvailabilityZone
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-AZ1"
+  AvailabilityZone2:
+    Description: AZ 2
+    Value:
+      Fn::GetAtt:
+      - PubSubnetAz2
+      - AvailabilityZone
+    Export:
+      Name:
+        Fn::Sub: "${NameSpace}-AZ2"

@@ -1,0 +1,66 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Master Template for deploying CloudFormation Stack
+
+Parameters:
+  S3Bucket:
+    Type: String
+    Description: Location of templates for building infrastucture
+#change to your bucket name below that you created on S3, upload .yaml files to your bucket
+    Default: s3-templates
+
+Resources:
+  VpcStack:
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      Parameters:
+        NameSpace: !Ref AWS::StackName
+        VpcAvailabilityZones: us-west-1b,us-west-1c
+        vpc: 10.0.0.0/16
+        pubsubnet1: 10.0.0.0/24
+        pubsubnet2: 10.0.1.0/24
+        privatesubnet1: 10.0.2.0/24
+        privatesubnet2: 10.0.3.0/24
+      TemplateURL:
+        Fn::Sub: "https://s3.amazonaws.com/${S3Bucket}/vpc.yaml"
+      TimeoutInMinutes: 20
+
+  SGs:
+    DependsOn: VpcStack
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      Parameters:
+        NameSpace: !Ref AWS::StackName
+      TemplateURL:
+        Fn::Sub: "https://s3.amazonaws.com/${S3Bucket}/security-groups.yaml"
+      TimeoutInMinutes: 20
+
+  LXJumpBox:
+    DependsOn: SGs
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      Parameters:
+        NameSpace: !Ref AWS::StackName
+        BoxName: LinuxJumpBox
+        KeyPairName: masterkey
+        PrivateIP: 10.0.0.10      
+        ec2size: t2.micro    
+        AMI: ami-18726478
+      TemplateURL:
+        Fn::Sub: "https://s3.amazonaws.com/${S3Bucket}/linux-jumpbox.yaml"
+      TimeoutInMinutes: 20  
+
+  WinJumpBox:
+    DependsOn: SGs
+    Type: "AWS::CloudFormation::Stack"
+    Properties:
+      Parameters:
+        NameSpace: !Ref AWS::StackName
+        BoxName: WindowsJumpBox
+        KeyPairName: masterkey
+        PrivateIP: 10.0.0.20      
+        ec2size: t3.medium 
+        AMI: ami-046d46120552571e6
+      TemplateURL:
+        Fn::Sub: "https://s3.amazonaws.com/${S3Bucket}/windows-jumpbox.yaml"
+      TimeoutInMinutes: 30 
